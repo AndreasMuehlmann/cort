@@ -1,4 +1,3 @@
-
 from collections import deque
 from dataclasses import dataclass
 from threading import Thread
@@ -6,8 +5,11 @@ import sys
 import time
 import winsound
 
+#TODO: better sound
+#TODO: delete from queue
+
 #time in seconds
-TIME_TEST = 1 * 5
+TIME_TEST = 15 * 60
 
 @dataclass
 class Person:
@@ -34,7 +36,7 @@ def make_sound(person):
 def print_queue(queue):
     print('\npersons in queue:\n')
     for person in queue:
-        print(f'{person.name}: {(int(((TIME_TEST - (time.time() - person.time)) / 60) * 10)) / 10}min')
+        print(f'{person.name}: {(round(((TIME_TEST - (time.time() - person.time)) / 60) * 10 + 0.5)) / 10}min')
     print()
 
 def get_input(queue, pipe):
