@@ -1,76 +1,157 @@
-from collections import deque
-from dataclasses import dataclass
-from threading import Thread
-import sys
 import time
-import winsound
+from dataclasses import dataclass
+from collections import deque
 
-#TODO: better sound
-#TODO: delete from queue
+from kivy.lang import Builder
+from kivy.clock import Clock
 
-#time in seconds
-TIME_TEST = 15 * 60
+from kivymd.app import MDApp
+from kivymd.uix.list import ThreeLineListItem
+from kivymd.uix.dialog import MDDialog
+from kivymd.uix.boxlayout import MDBoxLayout
+from kivymd.uix.button import MDFlatButton
+from kivymd.uix.button import MDRaisedButton
+
+#TODO: add a message when time is up
+#TODO: add Tab for overview
+#TODO: add settings to dialog window
+#TODO: settings
+
+#look here for docs: C:\Andi_Arbeit\Programmieren\cort\kivy_venv\Lib\site-packages\kivymd\uix
+#look here for icons: https://materialdesignicons.com/
 
 @dataclass
 class Person:
     name : str
-    time : int 
+    start_time : float 
+    status : str
 
-class MyThread (Thread) :
-    def __init__(self, queue, method, pipe):
-        Thread.__init__(self)
-        self.queue = queue
-        self.method = method
-        self.pipe = pipe
+persons = deque([])
+overview = deque([])
 
-    def run(self):
-        self.method(self.queue, self.pipe)
+#time in seconds
+TEST_TIME = 15 * 60
 
-def make_sound(person):
-    print(f'for {person.name} the time is up') 
-    winsound.Beep(440, 500)
-    winsound.Beep(490, 500)
-    winsound.Beep(300, 500)
-    winsound.Beep(440, 500) 
 
-def print_queue(queue):
-    print('\npersons in queue:\n')
-    for person in queue:
-        print(f'{person.name}: {(round(((TIME_TEST - (time.time() - person.time)) / 60) * 10 + 0.5)) / 10}min')
-    print()
+KV = '''
+<MDRaisedButton>
+    md_bg_color: app.theme_cls.primary_color
+    text_color: app.theme_cls.opposite_bg_dark
 
-def get_input(queue, pipe):
-    while True:
-        message = input()
+<MDFlatButton>
+    text_color: app.theme_cls.opposite_bg_dark
 
-        if message:
-            if message == 'show':
-                print_queue(queue)
+#this doesnt work 
+<Add_dialog_content>
+    size_hint_y: None
+    MDTextField:
+        hint_text: "Enter a name"
+        helper_text: "This will disappear when you click off"
+        helper_text_mode: "on_focus"
+        pos_hint: {"center_x": 0.5, "center_y": 0.5}
 
-            elif message == 'exit':
-                pipe.append('exit')
-                sys.exit(0)
+MDScreen:
+    ScrollView:
+
+        MDList:
+            id: container
+
+    MDToolbar:
+        title: "Cort"
+        right_action_items: [["plus", lambda x: app.callback_plus()], ["cog-outline", lambda x: app.callback_cog()]]
+'''
+
+dialog_content_add = """
+<Dialog_content_add>:
+    name: name
+    orientation: 'vertical'
+    spacing: 12
+    size_hint_y: None 
+    height: 25 
+
+    MDTextField:
+        id: name
+        hint_text: "Enter a name"
+        helper_text: ""
+        helper_text_mode: "on_focus"
+"""
+class Cort(MDApp):
+
+    dialog = None
+
+    def build(self):
+        self.theme_cls.theme_style = "Dark"
+        self.theme_cls.primary_palette = "BlueGray"
+
+        Clock.schedule_interval(self.update, 1)
+
+        Builder.load_string(dialog_content_add)
+        return Builder.load_string(KV) 
+
+    def callback_plus(self):
+        if not self.dialog:
+            self.dialog = MDDialog(
+                type="custom",
+                content_cls=Dialog_content_add(),
+                buttons=[
+                    MDFlatButton(
+                        text="CANCEL",
+                        on_release=self.callback_CANCEL
+                    ),
+                    MDRaisedButton(
+                        text="OK",
+                        on_release=self.callback_OK
+                    ),
+                ],
+            )
+            self.dialog.open()
+
+    def callback_CANCEL(self, obj):
+        self.dialog.dismiss(force=True)
+        self.dialog = None
+
+    def callback_OK(self, obj):
+        name = self.dialog.content_cls.name.text
+        self.add_person(name, time.time(), 'undefined')
+
+        self.dialog.dismiss(force=True)
+        self.dialog = None
+
+    def add_person(self, name, start_time, status):
+        person = Person(name, start_time, status)
+        persons.appendleft(person)
+        time_left = (TEST_TIME - (time.time() - person.start_time)) / 60
+        self.root.ids.container.add_widget(
+            ThreeLineListItem(
+                text = f"{name}",
+                secondary_text = f'{time_left:.1f}min',
+                tertiary_text = f'{status}'
+            )
+        )
+
+    def update(self, obj):
+        displayed_persons = self.root.ids.container.children
+        i = len(persons) - 1
+
+        while i >= 0:
+            time_left = (TEST_TIME - (time.time() - persons[i].start_time)) / 60
+
+            if time_left <= 0:
+                print(f'{persons[i].name}\'s time is up')
+                overview.appendleft(persons[i])
+                self.root.ids.container.remove_widget(displayed_persons[i])
+                del persons[i]
 
             else:
-                queue.append(Person(message, time.time()))
+                displayed_persons[i].secondary_text = f'{time_left:.1f}min'
 
-def check_ready(queue, pipe):
-    while True:
-        if queue and time.time() - queue[0].time >= TIME_TEST:
-            make_sound(queue.popleft())
+            i -= 1
 
-        if pipe and pipe[0] == 'exit':
-            sys.exit(0)
+    def callback_cog(self):
+        raise NotImplementedError
 
-def main():
-    queue = deque()
-    pipe = []
+class Dialog_content_add(MDBoxLayout):
+    pass
 
-    t1 = MyThread(queue, get_input, pipe)
-    t2 = MyThread(queue, check_ready, pipe)
-
-    t1.start()
-    t2.start()
-
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    Cort().run()
